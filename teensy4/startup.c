@@ -406,8 +406,6 @@ FLASHMEM void configure_cache(void)
 	SCB_CCR |= (SCB_CCR_IC | SCB_CCR_DC);
 }
 
-#ifdef ARDUINO_TEENSY41
-
 #define LUT0(opcode, pads, operand) (FLEXSPI_LUT_INSTRUCTION((opcode), (pads), (operand)))
 #define LUT1(opcode, pads, operand) (FLEXSPI_LUT_INSTRUCTION((opcode), (pads), (operand)) << 16)
 #define CMD_SDR         FLEXSPI_LUT_OPCODE_CMD_SDR
@@ -589,32 +587,42 @@ FLASHMEM void configure_external_ram()
 	FLEXSPI2_LUT24 = LUT0(CMD_SDR, PINS4, 0x38) | LUT1(ADDR_SDR, PINS4, 24);
 	FLEXSPI2_LUT25 = LUT0(WRITE_SDR, PINS4, 1);
 
-	// look for the first PSRAM chip
-	uint8_t size1 = flexspi2_psram_size(0);
-	if (size1 > 0) {
-		FLEXSPI2_FLSHA1CR0 = size1 << 10;
-		flexspi2_command(4, 0); // enter QPI mode
-		// look for a second PSRAM chip
-		uint8_t size2 = flexspi2_psram_size(size1 << 20);
-		external_psram_size = size1 + size2;
-		if (size2 > 0) {
-			FLEXSPI2_FLSHA2CR0 = size2 << 10;
-			flexspi2_command(4, size1 << 20);  // enter QPI mode
-		}
-		// TODO: zero uninitialized EXTMEM variables
-		// TODO: copy from flash to initialize EXTMEM variables
-		sm_set_pool(&extmem_smalloc_pool, &_extram_end,
-			external_psram_size * 0x100000 -
-			((uint32_t)&_extram_end - (uint32_t)&_extram_start),
-			1, NULL);
-	} else {
-		// No PSRAM
-		external_psram_size = 0;
-		memset(&extmem_smalloc_pool, 0, sizeof(extmem_smalloc_pool));
-	}
-}
+    // Check PSRAM on slots 1 and 2
+    #ifndef PSRAM2_OFFSET
+    #define PSRAM2_OFFSET 0x800000
+    #endif
 
-#endif // ARDUINO_TEENSY41
+    uint8_t size1 = flexspi2_psram_size(0);
+    uint32_t off2  = (size1 > 0) ? (((uint32_t)size1) << 20) : PSRAM2_OFFSET;
+    uint8_t size2  = flexspi2_psram_size(off2);
+
+    if (size1 > 0)
+    {
+        FLEXSPI2_FLSHA1CR0 = size1 << 10;
+        flexspi2_command(4, 0);
+    }
+    
+    if (size2 > 0)
+    {
+        FLEXSPI2_FLSHA2CR0 = size2 << 10;
+        flexspi2_command(4, off2);
+    }
+
+    external_psram_size = size1 + size2;
+
+    if (external_psram_size > 0)
+    {
+        sm_set_pool(&extmem_smalloc_pool, &_extram_end,
+            external_psram_size * 0x100000u -
+            ((uint32_t)&_extram_end - (uint32_t)&_extram_start),
+            1, NULL);
+    }
+    else
+    {
+        external_psram_size = 0;
+        memset(&extmem_smalloc_pool, 0, sizeof(extmem_smalloc_pool));
+    }
+}
 
 
 FLASHMEM void usb_pll_start()

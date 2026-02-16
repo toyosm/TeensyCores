@@ -4,6 +4,7 @@ MEMORY
 	DTCM (rwx):  ORIGIN = 0x20000000, LENGTH = 512K
 	RAM (rwx):   ORIGIN = 0x20200000, LENGTH = 512K
 	FLASH (rwx): ORIGIN = 0x60000000, LENGTH = 16128K
+    ERAM (rwx):  ORIGIN = 0x70000000, LENGTH = 16384K
 }
 
 ENTRY(ImageVectorTable)
@@ -70,6 +71,11 @@ SECTIONS
 		*(.dmabuffers)
 		. = ALIGN(32);
 	} > RAM
+ 
+    .bss.extram (NOLOAD) : {
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.externalram)))
+        . = ALIGN(32);
+    } > ERAM
 
 	.text.csf : {
 		FILL(0xFF)
@@ -91,6 +97,9 @@ SECTIONS
 
 	_heap_start = ADDR(.bss.dma) + SIZEOF(.bss.dma);
 	_heap_end = ORIGIN(RAM) + LENGTH(RAM);
+
+    _extram_start = ADDR(.bss.extram);
+    _extram_end = ADDR(.bss.extram) + SIZEOF(.bss.extram);
 
 	_itcm_block_count = (SIZEOF(.text.itcm) + SIZEOF(.ARM.exidx) + 0x7FFF) >> 15;
 	_flexram_bank_config = 0xAAAAAAAA | ((1 << (_itcm_block_count * 2)) - 1);
